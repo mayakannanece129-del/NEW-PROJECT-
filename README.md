@@ -1,3 +1,30 @@
 # NEW-PROJECT-
 
 https://drive.google.com/file/d/1uYG6r7AdkfASYb5lZCGkS10JJDSpge_0/view?usp=drivesdk
+
+[classrooms.js](https://github.com/user-attachments/files/29490749/classrooms.js)
+const Classrooms = {
+  render(){
+    const tbody = document.querySelector('#classroomTable tbody');
+    const list = Storage.get(KEYS.rooms);
+    tbody.innerHTML = list.map(r=>`
+      <tr><td>${r.id}</td><td>${r.name}</td><td>${r.capacity}</td><td>${r.type}</td>
+      <td><button class="del-btn" data-id="${r.id}">Delete</button></td></tr>`).join('') ||
+      `<tr><td colspan="5" style="text-align:center;color:var(--muted)">No classrooms</td></tr>`;
+    tbody.querySelectorAll('.del-btn').forEach(b=>b.onclick=()=>{
+      Storage.set(KEYS.rooms, Storage.get(KEYS.rooms).filter(x=>x.id!==b.dataset.id));
+      Classrooms.render(); App.refresh();
+    });
+  },
+  init(){
+    document.getElementById('classroomForm').onsubmit = e=>{
+      e.preventDefault();
+      const r = {id:croomId.value.trim(), name:croomName.value.trim(), capacity:+croomCap.value, type:croomType.value};
+      const list = Storage.get(KEYS.rooms);
+      if(list.some(x=>x.id===r.id)){ toast('Room ID exists','error'); return; }
+      list.push(r); Storage.set(KEYS.rooms, list);
+      e.target.reset(); toast('Classroom added');
+      Classrooms.render(); App.refresh();
+    };
+  }
+};
