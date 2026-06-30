@@ -1,0 +1,160 @@
+const Scheduler = {
+  checkConflict(tt, day, slot, facultyName, roomId, subjectCode){
+    for(const key in tt){
+      const [d,s] = key.split('|');
+      if(d!==day || s!==slot) continue;
+      const e = tt[key];
+      if(e.faculty===facultyName) return `Faculty ${facultyName} busy at ${day} ${slot}`;
+      if(e.room===roomId) return `Room ${roomId} occupied at ${day} ${slot}`;
+    }
+    return null;
+  },
+  assign(day, slot, subjectCode, roomId){
+    const subs = Storage.get(KEYS.subjects);
+    const sub = subs.find(x=>x.code===subjectCode);
+    if(!sub){ return 'Subject not found'; }
+    const tt = Storage.get(KEYS.tt, {});
+    const key = `${day}|${slot}`;
+    if(tt[key]) return `Slot ${day} ${slot} already used`;
+    const conflict = this.checkConflict(tt, day, slot, sub.faculty, roomId, subjectCode);
+    if(conflict) return conflict;
+    tt[key] = {code:sub.code, name:sub.name, faculty:sub.faculty, room:roomId};
+    Storage.set(KEYS.tt, tt);
+    return null;
+  },
+  remove(day, slot){
+    const tt = Storage.get(KEYS.tt, {});
+    delete tt[`${day}|${slot}`];
+    Storage.set(KEYS.tt, tt);
+  },
+  autoGenerate(){
+    const subs = Storage.get(KEYS.subjects);
+    const rooms = Storage.get(KEYS.rooms);
+    if(!subs.length || !rooms.length){ toast('Add subjects & rooms first','error'); return; }
+    const tt = {};
+    const alerts = [];
+    for(const sub of subs){
+      let assigned = 0;
+      outer:
+      for(const day of DAYS){
+        for(const slot of SLOTS){
+          if(assigned>=sub.hours) break outer;
+          const key = `${day}|${slot}`;
+          if(tt[key]) continue;
+          // find free room
+          const usedRooms = Object.entries(tt).filter(([k])=>k.startsWith(day+'|')&&k.endsWith(slot)).map(([,v])=>v.room);
+          const room = rooms.find(r=>!Object.values(tt).some(v=>v.room===r.id && Object.keys(tt).find(k=>tt[k]===v)===key));
+          // simpler: pick first room not conflicting in that slot
+          const slotEntries = Object.entries(tt).filter(([k])=>k===key);
+          const facultyBusy = Object.entries(tt).some(([k,v])=>k===key && v.faculty===sub.faculty);
+          if(facultyBusy) continue;
+          const freeRoom = rooms.find(r=>!Object.entries(tt).some(([k,v])=>k===key && v.room===r.id));
+          if(!freeRoom) continue;
+          tt[key] = {code:sub.code, name:sub.name, faculty:sub.faculty, room:freeRoom.id};
+          assigned++;
+        }
+      }
+      if(assigned<sub.hours) alerts.push(`Could only schedule ${assigned}/${sub.hours} hrs for ${sub.name}`);
+    }
+    Storage.set(KEYS.tt, tt);
+    const box = document.getElementById('alerts');
+    box.innerHTML = alerts.length
+      ? alerts.map(a=>`<div class="alert error">⚠ ${a}</div>`).join('')
+      : `<div class="alert success">✔ Timetable generated with no conflicts</div>`;
+    Viewer.render(); App.refresh();
+    toast('Timetable generated');
+  },
+  init(){
+    const fillDropdowns = ()=>{
+      mDay.innerHTML = DAYS.map(d=>`<option>${d}</option>`).join('');
+      mSlot.innerHTML = SLOTS.map(s=>`<option>${s}</option>`).join('');
+      mSubject.innerHTML = Storage.get(KEYS.subjects).map(s=>`<option value="${s.code}">${s.code} - ${s.name}</option>`).join('');
+      mRoom.innerHTML = Storage.get(KEYS.rooms).map(r=>`<option value="${r.id}">${r.id} - ${r.name}</option>`).join('');
+    };
+    fillDropdowns();
+    Scheduler._fill = fillDropdowns;
+
+    document.getElementById('manualForm').onsubmit = e=>{
+      e.preventDefault();
+      const err = Scheduler.assign(mDay.value, mSlot.value, mSubject.value, mRoom.value);
+      const box = document.getElementById('alerts');
+      if(err){ box.innerHTML = `<div class="alert error">⚠ ${err}</div>`; toast(err,'error'); }
+      else { box.innerHTML = `<div class="alert success">✔ Assigned successfully</div>`; toast('Assigned'); Viewer.render(); App.refresh(); }
+    };
+    document.getElementById('autoGenBtn').onclick = ()=>Scheduler.autoGenerate();
+    document.getElementById('clearTTBtn').onclick = ()=>{
+      if(confirm('Clear entire timetable?')){ Storage.set(KEYS.tt,{}); Viewer.render(); App.refresh(); toast('Cleared'); }
+    };
+  }
+};
+
+const Storage = {
+  get(key, def=[]){ try{ return JSON.parse(localStorage.getItem(key)) ?? def }catch{ return def } },
+  set(key, val){ localStorage.setItem(key, JSON.stringify(val)) }
+};
+const KEYS = { rooms:'scs_rooms', faculty:'scs_faculty', subjects:'scs_subjects', tt:'scs_tt' };
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+const SLOTS = ['09:00-10:00','10:00-11:00','11:00-12:00','12:00-13:00','14:00-15:00','15:00-16:00'];
+
+function toast(msg, type='success'){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = type==='error' ? 'var(--danger)' : type==='success' ? 'var(--success)' : 'var(--text)';
+  t.style.color = '#fff';
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2500);
+}
+
+const Subjects = {
+  render(){
+    const tbody = document.querySelector('#subjectTable tbody');
+    const list = Storage.get(KEYS.subjects);
+    tbody.innerHTML = list.map(s=>`
+      <tr><td>${s.code}</td><td>${s.name}</td><td>${s.faculty}</td><td>${s.hours}</td>
+      <td><button class="del-btn" data-id="${s.code}">Delete</button></td></tr>`).join('') ||
+      `<tr><td colspan="5" style="text-align:center;color:var(--muted)">No subjects</td></tr>`;
+    tbody.querySelectorAll('.del-btn').forEach(b=>b.onclick=()=>{
+      Storage.set(KEYS.subjects, Storage.get(KEYS.subjects).filter(x=>x.code!==b.dataset.id));
+      Subjects.render(); App.refresh();
+    });
+    // refresh faculty dropdown
+    const fac = Storage.get(KEYS.faculty);
+    document.getElementById('subFaculty').innerHTML =
+      fac.map(f=>`<option>${f.name}</option>`).join('') || '<option value="">No faculty</option>';
+  },
+  init(){
+    document.getElementById('subjectForm').onsubmit = e=>{
+      e.preventDefault();
+      const s = {code:subCode.value.trim(), name:subName.value.trim(), faculty:subFaculty.value, hours:+subHours.value};
+      const list = Storage.get(KEYS.subjects);
+      if(list.some(x=>x.code===s.code)){ toast('Subject code exists','error'); return; }
+      list.push(s); Storage.set(KEYS.subjects, list);
+      e.target.reset(); toast('Subject added');
+      Subjects.render(); App.refresh();
+    };
+  }
+};
+
+(function seed(){
+  if(localStorage.getItem('scs_seeded')) return;
+  Storage.set(KEYS.rooms, [
+    {id:'R101', name:'Room 101', capacity:60, type:'Lecture'},
+    {id:'R102', name:'Room 102', capacity:50, type:'Lecture'},
+    {id:'L201', name:'CS Lab', capacity:30, type:'Lab'},
+    {id:'S301', name:'Seminar Hall', capacity:100, type:'Seminar'}
+  ]);
+  Storage.set(KEYS.faculty, [
+    {id:'F01', name:'Dr. Sharma', dept:'CSE', email:'sharma@inst.edu'},
+    {id:'F02', name:'Prof. Mehta', dept:'CSE', email:'mehta@inst.edu'},
+    {id:'F03', name:'Dr. Reddy',  dept:'ECE', email:'reddy@inst.edu'},
+    {id:'F04', name:'Prof. Khan',  dept:'MATH', email:'khan@inst.edu'}
+  ]);
+  Storage.set(KEYS.subjects, [
+    {code:'CS101', name:'Data Structures', faculty:'Dr. Sharma', hours:4},
+    {code:'CS102', name:'Operating Systems', faculty:'Prof. Mehta', hours:3},
+    {code:'EC101', name:'Digital Circuits', faculty:'Dr. Reddy', hours:3},
+    {code:'MA101', name:'Discrete Math', faculty:'Prof. Khan', hours:3}
+  ]);
+  Storage.set(KEYS.tt, {});
+  localStorage.setItem('scs_seeded','1');
+})();
