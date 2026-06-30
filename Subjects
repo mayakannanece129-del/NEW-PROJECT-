@@ -1,0 +1,29 @@
+const Subjects = {
+  render(){
+    const tbody = document.querySelector('#subjectTable tbody');
+    const list = Storage.get(KEYS.subjects);
+    tbody.innerHTML = list.map(s=>`
+      <tr><td>${s.code}</td><td>${s.name}</td><td>${s.faculty}</td><td>${s.hours}</td>
+      <td><button class="del-btn" data-id="${s.code}">Delete</button></td></tr>`).join('') ||
+      `<tr><td colspan="5" style="text-align:center;color:var(--muted)">No subjects</td></tr>`;
+    tbody.querySelectorAll('.del-btn').forEach(b=>b.onclick=()=>{
+      Storage.set(KEYS.subjects, Storage.get(KEYS.subjects).filter(x=>x.code!==b.dataset.id));
+      Subjects.render(); App.refresh();
+    });
+    // refresh faculty dropdown
+    const fac = Storage.get(KEYS.faculty);
+    document.getElementById('subFaculty').innerHTML =
+      fac.map(f=>`<option>${f.name}</option>`).join('') || '<option value="">No faculty</option>';
+  },
+  init(){
+    document.getElementById('subjectForm').onsubmit = e=>{
+      e.preventDefault();
+      const s = {code:subCode.value.trim(), name:subName.value.trim(), faculty:subFaculty.value, hours:+subHours.value};
+      const list = Storage.get(KEYS.subjects);
+      if(list.some(x=>x.code===s.code)){ toast('Subject code exists','error'); return; }
+      list.push(s); Storage.set(KEYS.subjects, list);
+      e.target.reset(); toast('Subject added');
+      Subjects.render(); App.refresh();
+    };
+  }
+};
