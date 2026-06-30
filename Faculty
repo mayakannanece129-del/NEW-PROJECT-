@@ -1,0 +1,25 @@
+const Faculty = {
+  render(){
+    const tbody = document.querySelector('#facultyTable tbody');
+    const list = Storage.get(KEYS.faculty);
+    tbody.innerHTML = list.map(f=>`
+      <tr><td>${f.id}</td><td>${f.name}</td><td>${f.dept}</td><td>${f.email||'-'}</td>
+      <td><button class="del-btn" data-id="${f.id}">Delete</button></td></tr>`).join('') ||
+      `<tr><td colspan="5" style="text-align:center;color:var(--muted)">No faculty</td></tr>`;
+    tbody.querySelectorAll('.del-btn').forEach(b=>b.onclick=()=>{
+      Storage.set(KEYS.faculty, Storage.get(KEYS.faculty).filter(x=>x.id!==b.dataset.id));
+      Faculty.render(); App.refresh();
+    });
+  },
+  init(){
+    document.getElementById('facultyForm').onsubmit = e=>{
+      e.preventDefault();
+      const f = {id:facId.value.trim(), name:facName.value.trim(), dept:facDept.value.trim(), email:facEmail.value.trim()};
+      const list = Storage.get(KEYS.faculty);
+      if(list.some(x=>x.id===f.id)){ toast('Faculty ID exists','error'); return; }
+      list.push(f); Storage.set(KEYS.faculty, list);
+      e.target.reset(); toast('Faculty added');
+      Faculty.render(); App.refresh();
+    };
+  }
+};
