@@ -1,0 +1,31 @@
+const App = {
+  refresh(){
+    document.getElementById('statRooms').textContent = Storage.get(KEYS.rooms).length;
+    document.getElementById('statFaculty').textContent = Storage.get(KEYS.faculty).length;
+    document.getElementById('statSubjects').textContent = Storage.get(KEYS.subjects).length;
+    document.getElementById('statClasses').textContent = Object.keys(Storage.get(KEYS.tt,{})).length;
+    if(Scheduler._fill) Scheduler._fill();
+  },
+  showPage(name){
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.getElementById(name).classList.add('active');
+    document.querySelectorAll('.nav-link').forEach(n=>n.classList.toggle('active', n.dataset.page===name));
+    document.getElementById('pageTitle').textContent = ({dashboard:'Dashboard',classrooms:'Classrooms',faculty:'Faculty',subjects:'Subjects',scheduler:'Scheduler',viewer:'Weekly Timetable'})[name];
+    document.getElementById('sidebar').classList.remove('open');
+  },
+  init(){
+    Classrooms.init(); Faculty.init(); Subjects.init(); Scheduler.init(); Viewer.init();
+    Classrooms.render(); Faculty.render(); Subjects.render(); Viewer.render(); this.refresh();
+
+    document.querySelectorAll('.nav-link').forEach(n=>n.onclick=e=>{ e.preventDefault(); App.showPage(n.dataset.page); });
+    document.getElementById('menuBtn').onclick = ()=>document.getElementById('sidebar').classList.toggle('open');
+
+    const t = document.getElementById('themeToggle');
+    const apply = m=>{ document.documentElement.setAttribute('data-theme', m); t.innerHTML = m==='dark'?'<i class="fa-solid fa-sun"></i> Light Mode':'<i class="fa-solid fa-moon"></i> Dark Mode'; };
+    apply(localStorage.getItem('scs_theme')||'light');
+    t.onclick = ()=>{ const m = document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark'; localStorage.setItem('scs_theme',m); apply(m); };
+
+    setTimeout(()=>document.getElementById('loader').classList.add('hide'), 600);
+  }
+};
+window.addEventListener('DOMContentLoaded', ()=>App.init());
